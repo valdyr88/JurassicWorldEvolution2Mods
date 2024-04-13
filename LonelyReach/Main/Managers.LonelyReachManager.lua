@@ -20,7 +20,6 @@ local RaycastUtils = require("Helpers.RaycastUtils")
 local LonelyReachManager= module(..., (Mutators.Manager)())
 global.api.debug.Trace("acse Manager.LonelyReachManager.lua loaded")
 -----------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------
 LonelyReachManager.Init = function(self, _tProperties, _tEnvironment)
 	global.api.debug.Trace("acse Manager.LonelyReachManager Init")
 
@@ -42,7 +41,6 @@ LonelyReachManager.Init = function(self, _tProperties, _tEnvironment)
 	self.bLog = true
 end
 -----------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------
 LonelyReachManager.Advance = function(self, _nDeltaTime)
 	
 	self.timer1 = self.timer1 - _nDeltaTime
@@ -62,21 +60,17 @@ LonelyReachManager.Advance = function(self, _nDeltaTime)
 	self:UpdateLonelyTimers(_nDeltaTime)
 end
 -----------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------
 LonelyReachManager.Activate = function(self)
    self.lonelyDinos = {}
 end
------------------------------------------------------------------------------------------
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Deactivate = function(self)
    self.lonelyDinos = nil
 end
 -----------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------
 LonelyReachManager.Shutdown = function(self)
    self.lonelyDinos = nil
 end
------------------------------------------------------------------------------------------
 -----------------------------------------------------------------------------------------
 LonelyReachManager.ShouldBeInList = function(self, entityID)
 	
@@ -107,7 +101,6 @@ LonelyReachManager.ShouldBeInList = function(self, entityID)
 	return tNeeds.Social < tBio.nMinSocialThreshold
 end
 -----------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------
 LonelyReachManager.AddIfLonelyDino = function(self, entityID, value)
 	if not self:ShouldBeInList(entityID) then
 		return
@@ -122,7 +115,8 @@ LonelyReachManager.AddIfLonelyDino = function(self, entityID, value)
 			if self.bLog then
 				local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
 				local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
-				global.api.debug.Trace("Lonely dino readded : " .. sSpeciesName .. " : " .. entityID)
+				local sDinoName = api.ui.GetEntityName(entityID)
+				global.api.debug.Trace("Lonely dino readded : " .. sSpeciesName .. " : " .. sDinoName)
 			end
 		end
 		
@@ -137,7 +131,8 @@ LonelyReachManager.AddIfLonelyDino = function(self, entityID, value)
 	if self.bLog then
 		local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
 		local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
-		global.api.debug.Trace("Lonely dino added : " .. sSpeciesName .. " : " .. entityID)
+		local sDinoName = api.ui.GetEntityName(entityID)
+		global.api.debug.Trace("Lonely dino added : " .. sSpeciesName .. " : " .. sDinoName)
 	end
 end
 -----------------------------------------------------------------------------------------
@@ -166,7 +161,6 @@ LonelyReachManager.CheckForNewLonelyDinos = function(self)
 		global.api.debug.Trace("LonelyReachManager.CheckForNewLonelyDinos() num: " .. numLonely)
 	end
 end
------------------------------------------------------------------------------------------
 -----------------------------------------------------------------------------------------
 LonelyReachManager.IssueMovementCommands = function(self)
 	-- global.api.debug.Trace("LonelyReachManager.IssueMovementCommands()")
@@ -198,9 +192,11 @@ LonelyReachManager.IssueMovementCommands = function(self)
 				if self.bLog then
 					local nSpeciesID = self.dinosAPI:GetSpeciesID(dinosaurEntity)
 					local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
-				
+					local sDinoName = api.ui.GetEntityName(dinosaurEntity)
+					local sClosestDinoName = api.ui.GetEntityName(closestDino)
+					
 					-- local sDinoName = DinosaursDatabaseHelper.GetName(closestDino)
-					global.api.debug.Trace("Lonely " .. sSpeciesName .. " " .. dinosaurEntity .. ", moving to: " .. closestDino .. ", distance: " .. math.sqrt(distanceSq))
+					global.api.debug.Trace("Lonely " .. sSpeciesName .. " " .. sDinoName .. ", moving to: " .. sClosestDinoName .. ", distance: " .. math.sqrt(distanceSq))
 				end
 			end
 			
@@ -250,13 +246,13 @@ LonelyReachManager.RemoveNonLonelyDinos = function(self)
 				if self.bLog then
 					local nSpeciesID = self.dinosAPI:GetSpeciesID(dinosaurEntity)
 					local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
-					global.api.debug.Trace("Lonely dino removed " .. sSpeciesName .. ": " .. dinosaurEntity)
+					local sDinoName = api.ui.GetEntityName(dinosaurEntity)
+					global.api.debug.Trace("Lonely dino removed " .. sSpeciesName .. ": " .. sDinoName)
 				end
 			end
 		end
 	end
 end
------------------------------------------------------------------------------------------
 -----------------------------------------------------------------------------------------
 LonelyReachManager.FindClosestMemberOfSpecies = function(self, lonelyDino)
 	if lonelyDino == nil or self.dinosAPI:IsDead(lonelyDino) then
@@ -300,7 +296,6 @@ LonelyReachManager.FindClosestMemberOfSpecies = function(self, lonelyDino)
 	return targetDino
 end
 -----------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------
 LonelyReachManager.FindClosestGroupPosition = function(self, lonelyDino)
     local parkDinos = self.dinosAPI:GetDinosaurs(false)
 	local lonelySpecies = self.dinosAPI:GetSpeciesID(lonelyDino)
@@ -343,7 +338,6 @@ LonelyReachManager.FindClosestGroupPosition = function(self, lonelyDino)
 	return targetDino
 end
 -----------------------------------------------------------------------------------------
------------------------------------------------------------------------------------------
 LonelyReachManager.CommandTravelTo = function(self, entityID, position)
 	if not self.dinosAPI:IsDead(entityID) then
 		-- global.api.debug.Trace("LonelyReachManager.CommandTravelTo()")
@@ -352,7 +346,6 @@ LonelyReachManager.CommandTravelTo = function(self, entityID, position)
 		self.xdlFlowMotionAPI:TravelTo(entityID, tTransform:WithPos(position))
 	end
 end
------------------------------------------------------------------------------------------
 -----------------------------------------------------------------------------------------
 -- Validate the class methods/interfaces
 (Mutators.VerifyManagerModule)(LonelyReachManager)
