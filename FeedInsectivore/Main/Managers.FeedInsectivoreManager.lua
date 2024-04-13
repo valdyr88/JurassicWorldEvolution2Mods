@@ -216,13 +216,27 @@ FeedInsectivoreManager.FeedDino = function(self, entityID, duration, nextTime)
 	if not self.dinosAPI:IsDead(entityID) then
 		api.motiongraph.SetEnumVariable(entityID, "Action", "Actions", "Eat")
 		self.eatingDinos[entityID] = duration
-		self.hungryDinos[entityID].value = nextTime
+		self.hungryDinos[entityID].value = duration + nextTime
+		
+		if self.bLog then
+			local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
+			local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+			local sDinoName = api.ui.GetEntityName(entityID)
+			global.api.debug.Trace("Hungry dino start eat " .. sSpeciesName .. ": " .. sDinoName)
+		end
 	end
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.StopFeedDino = function(self, entityID)
 	if not self.dinosAPI:IsDead(entityID) then
 		api.motiongraph.SetEnumVariable(entityID, "Action", "Actions", "Idle")
+		
+		if self.bLog then
+			local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
+			local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+			local sDinoName = api.ui.GetEntityName(entityID)
+			global.api.debug.Trace("Hungry dino stop eating " .. sSpeciesName .. ": " .. sDinoName)
+		end
 	end
 end
 -----------------------------------------------------------------------------------------
