@@ -39,27 +39,9 @@ FeedInsectivoreManager.Init = function(self, _tProperties, _tEnvironment)
 	self.BaseIgnoreTime = 5.0
 	
 	self.bLog = true
-	
-	local tProperCaseAnimActions = {
-		"Idle",
-		"Sleep",
-		"Preen",
-		"Eat",
-		"Drink",
-		"AttackFence",
-		"AttackFenceFail",
-		"Die",
-		"DieRagdoll",
-	--	"Alert",
-	--	"Fight",
-	--	"Birth",
-	--	"Feeder",
-	--	"FeederExit",
-	--	"Social",
-	}
 end
 -----------------------------------------------------------------------------------------
-FeedInsectivoreManager.IsInsectivore = function(self, speciesName)
+FeedInsectivoreManager.CanBeInsectivore = function(self, speciesName)
 	if  speciesName == "Compsognathus" or
 		speciesName == "Coelophysis" or
 		speciesName == "MorosIntrepidus" or
@@ -70,16 +52,16 @@ FeedInsectivoreManager.IsInsectivore = function(self, speciesName)
 	return false
 end
 -----------------------------------------------------------------------------------------
-FeedInsectivoreManager.Advance = function(self, _nDeltaTime)
+FeedInsectivoreManager.Advance = function(self, deltaTime)
 	
-	self.timer1 = self.timer1 - _nDeltaTime
+	self.timer1 = self.timer1 - deltaTime
 	
 	if self.timer1 < 0 then
 		self.timer1 = self.CheckForNewHungryDinosTime
 		self:CheckForNewHungryDinos()
 	end
 	
-	self:UpdateHungryDinos(_nDeltaTime)
+	self:UpdateHungryDinos(deltaTime)
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.Activate = function(self)
@@ -102,7 +84,7 @@ FeedInsectivoreManager.ShouldBeInList = function(self, entityID)
 	
 	local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
 	local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
-	if not self:IsInsectivore(sSpeciesName) then
+	if not self:CanBeInsectivore(sSpeciesName) then
 		return false
 	end
 	
