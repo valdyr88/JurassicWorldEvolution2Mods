@@ -99,7 +99,7 @@ LonelyReachManager.ShouldBeInList = function(self, entityID)
     local tBio = self.dinosAPI:GetDinosaurBio(entityID)
 	-- global.api.debug.Trace("thirst: " .. tNeeds.Thirst .. ", hunger; " .. tNeeds.Hunger)
 	
-	return tNeeds.Social < tBio.nMinSocialThreshold
+	return tNeeds.HabitatSocial < tBio.nMinSocialThreshold
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.AddIfLonelyDino = function(self, entityID, value)
@@ -207,7 +207,7 @@ LonelyReachManager.IssueMovementCommands = function(self)
 					local tBio = self.dinosAPI:GetDinosaurBio(dinosaurEntity)
 					
 					-- local sDinoName = DinosaursDatabaseHelper.GetName(closestDino)
-					global.api.debug.Trace("Lonely " .. sSpeciesName .. " " .. sDinoName .. ", moving to: " .. sClosestDinoName .. ", distance: " .. math.sqrt(distanceSq) .. " social: " .. tNeeds.Social .. " < socialThr: " .. tBio.nMinSocialThreshold)
+					global.api.debug.Trace("Lonely " .. sSpeciesName .. " " .. sDinoName .. ", moving to: " .. sClosestDinoName .. ", distance: " .. math.sqrt(distanceSq) .. " social: " .. tNeeds.HabitatSocial .. " < socialThr: " .. tBio.nMinSocialThreshold)
 				end
 			end
 			
