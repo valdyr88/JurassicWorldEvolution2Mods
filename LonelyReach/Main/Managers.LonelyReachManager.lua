@@ -31,20 +31,21 @@ LonelyReachManager.Init = function(self, _tProperties, _tEnvironment)
 	self.timer2 = 0.0
 	
 	self.CheckForNewLonelyDinosTime = 30.0
-	self.IssueMovementCommandsTime = 2.5
-	self.IssueMovementCommandTime = 7.5
-	self.IssueMovementCommandRndTime = 5.0
-	self.MinDistanceThreshold = 48.0*48.0
-	self.MaxTravelDistance = 90.0
+	self.RemoveNonLonelyDinosTime = 10.0
+	self.IssueMovementCommandTime = 0.5
+	self.IssueMovementCommandRndTime = 4.0
+	self.MinDistanceThresholdSq = 48.0*48.0
+	self.MaxTravelDistance = 150.0
+	self.MaxTravelDistanceSq = self.MaxTravelDistance*self.MaxTravelDistance
 	self.BaseIgnoreTime = 60.0
 	
 	self.bLog = true
 end
 -----------------------------------------------------------------------------------------
-LonelyReachManager.Advance = function(self, _nDeltaTime)
+LonelyReachManager.Advance = function(self, deltaTime)
 	
-	self.timer1 = self.timer1 - _nDeltaTime
-	self.timer2 = self.timer2 - _nDeltaTime
+	self.timer1 = self.timer1 - deltaTime
+	self.timer2 = self.timer2 - deltaTime
 	
 	if self.timer1 < 0 then
 		self.timer1 = self.CheckForNewLonelyDinosTime
@@ -52,12 +53,12 @@ LonelyReachManager.Advance = function(self, _nDeltaTime)
 	end
 	
 	if self.timer2 < 0 then
-		self.timer2 = self.IssueMovementCommandsTime
+		self.timer2 = self.RemoveNonLonelyDinosTime
 		self:RemoveNonLonelyDinos()
-		self:IssueMovementCommands()
 	end
 	
-	self:UpdateLonelyTimers(_nDeltaTime)
+	self:UpdateLonelyTimers(deltaTime)
+	self:IssueMovementCommands()
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Activate = function(self)
@@ -175,16 +176,23 @@ LonelyReachManager.IssueMovementCommands = function(self)
 				local targetPos = TransformAPI.GetTransform(closestDino):GetPos()
 				
 				--limit travel distance
-				local dX = targetPos:GetX() - lonelyPos:GetX()
-				local dY = targetPos:GetY() - lonelyPos:GetY()
-				local dZ = targetPos:GetZ() - lonelyPos:GetZ()
+				-- local dX = targetPos:GetX() - lonelyPos:GetX()
+				-- local dY = targetPos:GetY() - lonelyPos:GetY()
+				-- local dZ = targetPos:GetZ() - lonelyPos:GetZ()
+				local dPos = targetPos - lonelyPos
+				local dX = dPos:GetX()
+				local dY = dPos:GetY()
+				local dZ = dPos:GetZ()
 				local distanceSq = dX*dX + dY*dY + dZ*dZ
-				if distanceSq > (self.MaxTravelDistance*self.MaxTravelDistance) then
+				if distanceSq > self.MaxTravelDistanceSq then
 					local scaleDelta = self.MaxTravelDistance / math.sqrt(distanceSq)
 					targetPos = Vector3:new(dX * scaleDelta + lonelyPos:GetX(),
-											dY * scaleDelta + lonelyPos:GetY(),
+											dY * scaleDelta + lonelyPos:GetY() + 1000.0,
 											dZ * scaleDelta + lonelyPos:GetZ())
-					targetPos = RaycastUtils.GetTerrainPositionUnderRaycast(targetPos, Vector3:new(0.0,-1.0,0.0))
+					local raytracePos = RaycastUtils.GetTerrainPositionUnderRaycast(targetPos, Vector3:new(0.0,-1.0,0.0))
+					targetPos = Vector3:new(targetPos:GetX(),
+											raytracePos:GetY(),
+											targetPos:GetZ())
 				end
 				
 				self:CommandTravelTo(dinosaurEntity, targetPos)
@@ -195,8 +203,11 @@ LonelyReachManager.IssueMovementCommands = function(self)
 					local sDinoName = api.ui.GetEntityName(dinosaurEntity)
 					local sClosestDinoName = api.ui.GetEntityName(closestDino)
 					
+					local tNeeds = self.dinosAPI:GetSatisfactionLevels(dinosaurEntity)
+					local tBio = self.dinosAPI:GetDinosaurBio(dinosaurEntity)
+					
 					-- local sDinoName = DinosaursDatabaseHelper.GetName(closestDino)
-					global.api.debug.Trace("Lonely " .. sSpeciesName .. " " .. sDinoName .. ", moving to: " .. sClosestDinoName .. ", distance: " .. math.sqrt(distanceSq))
+					global.api.debug.Trace("Lonely " .. sSpeciesName .. " " .. sDinoName .. ", moving to: " .. sClosestDinoName .. ", distance: " .. math.sqrt(distanceSq) .. " social: " .. tNeeds.Social .. " < socialThr: " .. tBio.nMinSocialThreshold)
 				end
 			end
 			
@@ -275,12 +286,16 @@ LonelyReachManager.FindClosestMemberOfSpecies = function(self, lonelyDino)
 		   not self.dinosAPI:IsDead(otherDino) then
 			
 			local otherDinoPos = TransformAPI.GetTransform(otherDino):GetPos()
-			local dX = lonelyPos:GetX() - otherDinoPos:GetX()
-			local dY = lonelyPos:GetY() - otherDinoPos:GetY()
-			local dZ = lonelyPos:GetZ() - otherDinoPos:GetZ()
+			-- local dX = lonelyPos:GetX() - otherDinoPos:GetX()
+			-- local dY = lonelyPos:GetY() - otherDinoPos:GetY()
+			-- local dZ = lonelyPos:GetZ() - otherDinoPos:GetZ()
+			local dPos = lonelyPos - otherDinoPos
+			local dX = dPos:GetX()
+			local dY = dPos:GetY()
+			local dZ = dPos:GetZ()
 			local newDistance = dX*dX + dY*dY + dZ*dZ
 			
-			if (newDistance < distance) and (newDistance > self.MinDistanceThreshold) then
+			if (newDistance < distance) and (newDistance > self.MinDistanceThresholdSq) then
 				distance = newDistance
 				targetDino = otherDino
 			end
@@ -317,9 +332,13 @@ LonelyReachManager.FindClosestGroupPosition = function(self, lonelyDino)
 			
 			listOfPositions[otherDino] = otherDinoPos
 			
-			local dX = lonelyPos:GetX() - otherDinoPos:GetX()
-			local dY = lonelyPos:GetY() - otherDinoPos:GetY()
-			local dZ = lonelyPos:GetZ() - otherDinoPos:GetZ()
+			-- local dX = lonelyPos:GetX() - otherDinoPos:GetX()
+			-- local dY = lonelyPos:GetY() - otherDinoPos:GetY()
+			-- local dZ = lonelyPos:GetZ() - otherDinoPos:GetZ()
+			local dPos = lonelyPos - otherDinoPos
+			local dX = dPos:GetX()
+			local dY = dPos:GetY()
+			local dZ = dPos:GetZ()
 			local newDistance = dX*dX + dY*dY + dZ*dZ
 			
 			if (newDistance < distance) and (newDistance > self.MinDistanceThreshold) then

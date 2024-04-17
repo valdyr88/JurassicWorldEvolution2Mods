@@ -38,7 +38,7 @@ FeedInsectivoreManager.Init = function(self, _tProperties, _tEnvironment)
 	self.FeedAmountMax = 0.15
 	self.BaseIgnoreTime = 5.0
 	
-	self.bLog = true
+	self.bLog = false
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.CanBeInsectivore = function(self, speciesName)
