@@ -186,7 +186,9 @@ LonelyReachManager.IssueMovementCommands = function(self)
 	
     for dinosaurEntity,v in pairs(self.lonelyDinos) do
 		
-		if v ~= nil and (v.key ~= nil and v.value ~= nil) and (v.key == true and v.value < 0.0) and self:CanIssueCommandsNow(dinosaurEntity) then		
+		if v ~= nil and (v.key ~= nil and v.value ~= nil) and (v.key == true and v.value < 0.0) and
+		   dinosaurEntity ~= nil and not self.dinosAPI:IsDead(dinosaurEntity) then
+			
 			local closestDino = self:FindClosestMemberOfSpecies(dinosaurEntity)
 			
 			if closestDino ~= nil then

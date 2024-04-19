@@ -39,6 +39,7 @@ FeedInsectivoreManager.Init = function(self, _tProperties, _tEnvironment)
 	self.BaseIgnoreTime = 5.0
 	
 	self.bLog = false
+	self.bLogOnlyFavoriteDinos = true
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.CanBeInsectivore = function(self, speciesName)
@@ -76,6 +77,14 @@ FeedInsectivoreManager.Shutdown = function(self)
    self.hungryDinos = nil
 end
 -----------------------------------------------------------------------------------------
+FeedInsectivoreManager.ShouldLog = function(self, entityID)
+	if self.bLogOnlyFavoriteDinos then
+		return self.dinosAPI:IsDinosaurFavourited(entityID)
+	else
+		return self.bLog
+	end
+end
+-----------------------------------------------------------------------------------------
 FeedInsectivoreManager.ShouldBeInList = function(self, entityID)
 	
 	if entityID == nil or self.dinosAPI:IsDead(entityID) then
@@ -103,7 +112,7 @@ FeedInsectivoreManager.AddIfHungryDino = function(self, entityID, value)
 			self.hungryDinos[entityID].key = true
 			self.hungryDinos[entityID].value = value
 			
-			if self.bLog then
+			if self:ShouldLog(entityID) then
 				local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
 				local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 				local sDinoName = api.ui.GetEntityName(entityID)
@@ -118,7 +127,7 @@ FeedInsectivoreManager.AddIfHungryDino = function(self, entityID, value)
 	self.hungryDinos[entityID].key = true
 	self.hungryDinos[entityID].value = value
 	
-	if self.bLog then
+	if self:ShouldLog(entityID) then
 		local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
 		local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 		local sDinoName = api.ui.GetEntityName(entityID)
@@ -128,7 +137,7 @@ end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.UpdateHungryDinos = function(self, deltaTime)
     for dinosaurEntity,v in pairs(self.hungryDinos) do
-		if v ~= nil and v.value ~= nil and v.key == true then
+		if v ~= nil and v.value ~= nil and v.key == true and not self.dinosAPI:IsDead(dinosaurEntity) then
 			local oldValue = v.value
 			v.value = v.value - deltaTime
 			self.hungryDinos[dinosaurEntity].value = v.value
@@ -171,7 +180,7 @@ FeedInsectivoreManager.RemoveNonHungryDinos = function(self)
 					self.hungryDinos[dinosaurEntity].value = math.huge
 				end
 				
-				if self.bLog then
+				if self:ShouldLog(dinosaurEntity) then
 					local nSpeciesID = self.dinosAPI:GetSpeciesID(dinosaurEntity)
 					local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 					local sDinoName = api.ui.GetEntityName(dinosaurEntity)
@@ -193,7 +202,7 @@ FeedInsectivoreManager.FeedDino = function(self, entityID, amount, nextTime)
 		
 		self.hungryDinos[entityID].value = nextTime
 		
-		if self.bLog then
+		if self:ShouldLog(entityID) then
 			local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
 			local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 			local sDinoName = api.ui.GetEntityName(entityID)
