@@ -104,11 +104,11 @@ LonelyReachManager.ShouldBeInList = function(self, entityID)
 	local tNeeds = self.dinosAPI:GetSatisfactionLevels(entityID)
 	
 	-- if thirsty, hungry, sleepy then prioritise those
-	if (tNeeds.Thirst < 0.6) or (tNeeds.Hunger < 0.5) or (tNeeds.Sleep < 0.3) or (tNeeds.Stamina < 0.3) then
+	if (tNeeds.Thirst < 0.6) or (tNeeds.Hunger < 0.5) or (tNeeds.Sleep < 0.00125) or (tNeeds.Stamina < 0.3) then
 		return false
 	end
 	
-	-- if (tNeeds.Thirst < 0.75) or (tNeeds.Hunger < 0.75) or (tNeeds.Sleep < 0.25) then
+	-- if (tNeeds.Thirst < 0.75) or (tNeeds.Hunger < 0.75) or (tNeeds.Sleep < 0.0025) then
 		-- if math.random(0,100) < 50 then
 			-- return false
 		-- end
@@ -263,11 +263,11 @@ LonelyReachManager.CalcAddToListDowntime = function(self, entityID)
 		return 5.0*self.BaseIgnoreTime
 	end
 	
-	if (tNeeds.Thirst < 0.33) or (tNeeds.Hunger < 0.33) or (tNeeds.Sleep < 0.1) then
+	if (tNeeds.Thirst < 0.33) or (tNeeds.Hunger < 0.33) or (tNeeds.Sleep < 0.00125) or (tNeeds.Stamina < 0.1) then
 		return 2.5*self.BaseIgnoreTime
 	end
 	
-	if (tNeeds.Thirst < 0.5) or (tNeeds.Hunger < 0.5) or (tNeeds.Sleep < 0.25) then
+	if (tNeeds.Thirst < 0.5) or (tNeeds.Hunger < 0.5) or (tNeeds.Sleep < 0.0025) or (tNeeds.Stamina < 0.3) then
 		return self.BaseIgnoreTime
 	end
 	
@@ -287,7 +287,7 @@ LonelyReachManager.RemoveNonLonelyDinos = function(self)
 					self.lonelyDinos[dinosaurEntity].value = math.huge
 				end
 				
-				if self:ShouldLog(dinosaurEntity) then
+				if self:ShouldLog(dinosaurEntity) and not self.dinosAPI:IsDead(dinosaurEntity) then
 					local nSpeciesID = self.dinosAPI:GetSpeciesID(dinosaurEntity)
 					local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 					local sDinoName = api.ui.GetEntityName(dinosaurEntity)
