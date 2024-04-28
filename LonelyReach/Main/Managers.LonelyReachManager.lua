@@ -4,6 +4,8 @@ local pairs = global.pairs
 local require = global.require
 local module = global.module
 local math = global.math
+local loadfile = global.loadfile
+local tostring = tostring
 local table = require("Common.tableplus")
 local Vector3 = require("Vector3")
 local Quaternion = require("Quaternion")
@@ -22,6 +24,69 @@ local DinosAPI = api.world.GetWorldAPIs().dinosaurs
 local LonelyReachManager= module(..., (Mutators.Manager)())
 global.api.debug.Trace("acse Manager.LonelyReachManager.lua loaded")
 -----------------------------------------------------------------------------------------
+LonelyReachManager.PrintConfigVars = function(self)
+	global.api.debug.Trace("")
+	global.api.debug.Trace("LonelyReachManager loaded values from config:")
+	global.api.debug.Trace("")
+	global.api.debug.Trace("	bLogAll: " .. tostring(self.bLogAll))
+	global.api.debug.Trace("	bLogOnlyFavoriteDinos: " .. tostring(self.bLogOnlyFavoriteDinos))
+	global.api.debug.Trace("	CheckForNewLonelyDinosTime " .. self.CheckForNewLonelyDinosTime)
+	global.api.debug.Trace("	RemoveNonLonelyDinosTime " .. self.RemoveNonLonelyDinosTime)
+	global.api.debug.Trace("	IssueMovementCommandTime " .. self.IssueMovementCommandTime)
+	global.api.debug.Trace("	IssueMovementCommandRndTime " .. self.IssueMovementCommandRndTime)
+	global.api.debug.Trace("	MinDistanceThreshold " .. self.MinDistanceThreshold)
+	global.api.debug.Trace("	MaxTravelDistance " .. self.MaxTravelDistance)
+	global.api.debug.Trace("	ClosestNonLonelyRatio " .. self.ClosestNonLonelyRatio)
+	global.api.debug.Trace("	ClosestNonLonelyMaxDistance " .. self.ClosestNonLonelyMaxDistance)
+	global.api.debug.Trace("	BaseIgnoreTime " .. self.BaseIgnoreTime)
+	global.api.debug.Trace("")
+end
+-----------------------------------------------------------------------------------------
+LonelyReachManager.LoadVarsFromConfig = function(self)
+	local vars = {
+		bLogAll = false,
+		bLogOnlyFavoriteDinos = true,
+		CheckForNewLonelyDinosTime = 30.0,
+		RemoveNonLonelyDinosTime = 10.0,
+		IssueMovementCommandTime = 0.5,
+		IssueMovementCommandRndTime = 4.0,
+		CommandCount = 5,
+		MinDistanceThreshold = 48.0,
+		MaxTravelDistance = 750.0,
+		ClosestNonLonelyRatio = 0.333,
+		ClosestNonLonelyMaxDistance = 400.0,
+		BaseIgnoreTime = 60.0
+	}
+	
+	local chunk, err = loadfile('Win64\\ovldata\\LonelyReach\\LonelyReachConfig.lua', 'bt', vars)
+	if not err then
+		chunk()
+	else
+		global.api.debug.Trace("LonelyReachManager can't open config file")
+	end
+	
+	self.bLogAll = vars.bLogAll
+	self.bLogOnlyFavoriteDinos = vars.bLogAll == false and vars.bLogOnlyFavoriteDinos == true
+	
+	self.CheckForNewLonelyDinosTime = vars.CheckForNewLonelyDinosTime
+	self.RemoveNonLonelyDinosTime =	vars.RemoveNonLonelyDinosTime
+	self.IssueMovementCommandTime = vars.IssueMovementCommandTime
+	self.IssueMovementCommandRndTime = vars.IssueMovementCommandRndTime
+	self.CommandCount = vars.CommandCount
+	self.MinDistanceThreshold = vars.MinDistanceThreshold
+	self.MaxTravelDistance = vars.MaxTravelDistance
+	self.ClosestNonLonelyRatio = vars.ClosestNonLonelyRatio
+	self.ClosestNonLonelyMaxDistance = vars.ClosestNonLonelyMaxDistance
+	self.BaseIgnoreTime = vars.BaseIgnoreTime
+	
+	self.MinDistanceThresholdSq = self.MinDistanceThreshold*self.MinDistanceThreshold
+	self.MaxTravelDistanceSq = self.MaxTravelDistance*self.MaxTravelDistance
+	self.ClosestNonLonelyRatioSq = self.ClosestNonLonelyRatio*self.ClosestNonLonelyRatio
+	self.ClosestNonLonelyMaxDistanceSq = self.ClosestNonLonelyMaxDistance*self.ClosestNonLonelyMaxDistance
+	
+	self:PrintConfigVars()
+end
+-----------------------------------------------------------------------------------------
 LonelyReachManager.Init = function(self, _tProperties, _tEnvironment)
 	global.api.debug.Trace("acse Manager.LonelyReachManager Init")
 	
@@ -29,41 +94,28 @@ LonelyReachManager.Init = function(self, _tProperties, _tEnvironment)
 	self.timer1 = 0.0
 	self.timer2 = 0.0
 	
-	self.CheckForNewLonelyDinosTime = 30.0
-	self.RemoveNonLonelyDinosTime = 10.0
-	self.IssueMovementCommandTime = 0.5
-	self.IssueMovementCommandRndTime = 4.0
-	self.MinDistanceThreshold = 48.0
-	self.MinDistanceThresholdSq = self.MinDistanceThreshold*self.MinDistanceThreshold
-	self.MaxTravelDistance = 750.0
-	self.MaxTravelDistanceSq = self.MaxTravelDistance*self.MaxTravelDistance
-	self.ClosestNonLonelyRatio = 0.333
-	self.ClosestNonLonelyRatioSq = self.ClosestNonLonelyRatio*self.ClosestNonLonelyRatio
-	self.ClosestNonLonelyMaxDistance = 400.0
-	self.ClosestNonLonelyMaxDistanceSq = self.ClosestNonLonelyMaxDistance*self.ClosestNonLonelyMaxDistance
-	self.BaseIgnoreTime = 60.0
-	
-	self.bLog = true
+	self.bLogAll = false
 	self.bLogOnlyFavoriteDinos = true
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Activate = function(self)
-   self.lonelyDinos = {}
+	self.lonelyDinos = {}
+	self:LoadVarsFromConfig()
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Deactivate = function(self)
-   self.lonelyDinos = nil
+	self.lonelyDinos = nil
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Shutdown = function(self)
-   self.lonelyDinos = nil
+	self.lonelyDinos = nil
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.ShouldLog = function(self, entityID)
 	if self.bLogOnlyFavoriteDinos then
 		return DinosAPI:IsDinosaurFavourited(entityID)
 	else
-		return self.bLog
+		return self.bLogAll
 	end
 end
 -----------------------------------------------------------------------------------------
@@ -229,7 +281,7 @@ LonelyReachManager.CheckForNewLonelyDinos = function(self)
 		self:AddIfLonelyDino(entityID, 2.0)
 	end
 	
-	if self.bLog then
+	if self.bLogAll or self.bLogOnlyFavoriteDinos then
 		local numLonely = 0
 		for k,v in pairs(self.lonelyDinos) do
 			if v ~= nil then
@@ -329,12 +381,12 @@ LonelyReachManager.IssueMovementCommands = function(self)
 					
 					local cmdCount = self.lonelyDinos[entityID].cmdCounter
 					if cmdCount > 0 then
-						self.lonelyDinos[entityID].cmdCounter = cmdCount - 1
+						self.lonelyDinos[entityID].cmdCounter = cmdCount-1
 						self.lonelyDinos[entityID].value = 0.25
 					else
 						self.lonelyDinos[entityID].value = math.random() * self.IssueMovementCommandRndTime
 																+ self.IssueMovementCommandTime
-						self.lonelyDinos[entityID].cmdCounter = 5
+						self.lonelyDinos[entityID].cmdCounter = self.CommandCount
 					end
 				end
 			end
@@ -345,16 +397,19 @@ end
 
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Advance = function(self, deltaTime)
+	if deltaTime == 0.0 then
+		return
+	end
 	
 	self.timer1 = self.timer1 - deltaTime
 	self.timer2 = self.timer2 - deltaTime
 	
-	if self.timer1 < 0 then
+	if self.timer1 < 0.0 then
 		self.timer1 = self.CheckForNewLonelyDinosTime
 		self:CheckForNewLonelyDinos()
 	end
 	
-	if self.timer2 < 0 then
+	if self.timer2 < 0.0 then
 		self.timer2 = self.RemoveNonLonelyDinosTime
 		self:RemoveNonLonelyDinos()
 	end
@@ -362,4 +417,9 @@ LonelyReachManager.Advance = function(self, deltaTime)
 	self:UpdateLonelyTimers(deltaTime)
 	self:IssueMovementCommands()
 end
+-----------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------
+-- Validate the class methods/interfaces
+(Mutators.VerifyManagerModule)(LonelyReachManager)
 -----------------------------------------------------------------------------------------
