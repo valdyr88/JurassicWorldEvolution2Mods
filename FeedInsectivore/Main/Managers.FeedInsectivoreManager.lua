@@ -4,6 +4,7 @@ local pairs = global.pairs
 local require = global.require
 local module = global.module
 local math = global.math
+local loadfile = global.loadfile
 local type = type
 local tostring = tostring
 local table = require("Common.tableplus")
@@ -17,150 +18,275 @@ local PhysicsAPI = api.physics
 local TransformAPI = api.transform
 local DinosaursDatabaseHelper = require("Helpers.DinosaursDatabaseHelper")
 local RaycastUtils = require("Helpers.RaycastUtils")
+local DinosAPI = api.world.GetWorldAPIs().dinosaurs
 
 -----------------------------------------------------------------------------------------
 local FeedInsectivoreManager= module(..., (Mutators.Manager)())
 global.api.debug.Trace("acse Manager.FeedInsectivoreManager.lua loaded")
 -----------------------------------------------------------------------------------------
+FeedInsectivoreManager.PrintConfigVars = function(self)
+	global.api.debug.Trace("")
+	global.api.debug.Trace("FeedInsectivoreManager values:")
+	global.api.debug.Trace("")
+	global.api.debug.Trace("	bLogAll: " .. tostring(self.bLogAll))
+	global.api.debug.Trace("	bLogOnlyFavoriteDinos: " .. tostring(self.bLogOnlyFavoriteDinos))
+	global.api.debug.Trace("	CheckForNewHungryDinosTime: " .. self.CheckForNewHungryDinosTime)
+	global.api.debug.Trace("")
+	for k,v in pairs(self.SpeciesInfo) do
+		global.api.debug.Trace("	id: " .. k .. " = {")
+		global.api.debug.Trace("		Species: " .. v.Species)
+		global.api.debug.Trace("		HungerThreshold: " .. v.HungerThreshold)
+		global.api.debug.Trace("		RemoveThreshold: " .. v.RemoveThreshold)
+		global.api.debug.Trace("		FeedTimeDelayMin: " .. v.FeedTimeDelayMin)
+		global.api.debug.Trace("		FeedTimeDelayMax: " .. v.FeedTimeDelayMax)
+		global.api.debug.Trace("		FeedAmountMin: " .. v.FeedAmountMin)
+		global.api.debug.Trace("		FeedAmountMax: " .. v.FeedAmountMax)
+		global.api.debug.Trace("		IgnoreTime: " .. v.IgnoreTime)
+		global.api.debug.Trace("	}")
+	end
+	global.api.debug.Trace("")
+end
+-----------------------------------------------------------------------------------------
+FeedInsectivoreManager.LoadVarsFromConfig = function(self)
+	local vars = {
+		bLogAll = false,
+		bLogOnlyFavoriteDinos = true,
+		CheckForNewHungryDinosTime = 30.0,
+		FeedDinosInfo = {
+			{
+				Species = "Compsognathus",
+				HungerThreshold = 0.45,
+				RemoveThreshold = 0.85,
+				FeedTimeDelayMin = 7,
+				FeedTimeDelayMax = 15,
+				FeedAmountMin = 0.01,
+				FeedAmountMax = 0.15,
+				FeedWaterContentFraction = 0.333,
+				IgnoreTime = 5.0
+			},
+			{
+				Species = "Coelophysis",
+				HungerThreshold = 0.45,
+				RemoveThreshold = 0.85,
+				FeedTimeDelayMin = 7,
+				FeedTimeDelayMax = 15,
+				FeedAmountMin = 0.01,
+				FeedAmountMax = 0.15,
+				FeedWaterContentFraction = 0.333,
+				IgnoreTime = 5.0
+			},
+			{
+				Species = "MorosIntrepidus",
+				HungerThreshold = 0.45,
+				RemoveThreshold = 0.85,
+				FeedTimeDelayMin = 7,
+				FeedTimeDelayMax = 15,
+				FeedAmountMin = 0.01,
+				FeedAmountMax = 0.15,
+				FeedWaterContentFraction = 0.333,
+				IgnoreTime = 5.0
+			},
+			{
+				Species = "Sinosauropteryx",
+				HungerThreshold = 0.45,
+				RemoveThreshold = 0.85,
+				FeedTimeDelayMin = 7,
+				FeedTimeDelayMax = 15,
+				FeedAmountMin = 0.01,
+				FeedAmountMax = 0.15,
+				FeedWaterContentFraction = 0.333,
+				IgnoreTime = 5.0
+			},
+			{
+				Species = "Troodon",
+				HungerThreshold = 0.45,
+				RemoveThreshold = 0.85,
+				FeedTimeDelayMin = 7,
+				FeedTimeDelayMax = 15,
+				FeedAmountMin = 0.01,
+				FeedAmountMax = 0.15,
+				FeedWaterContentFraction = 0.333,
+				IgnoreTime = 5.0
+			}
+		}
+	}
+	
+	local chunk, err = loadfile('Win64\\ovldata\\FeedInsectivore\\FeedInsectivoreConfig.lua', 'bt', vars)
+	if not err then
+		chunk()
+	else
+		global.api.debug.Trace("FeedInsectivore can't open config file")
+	end
+	
+	self.bLogAll = vars.bLogAll
+	self.bLogOnlyFavoriteDinos = vars.bLogAll == false and vars.bLogOnlyFavoriteDinos == true
+	self.CheckForNewHungryDinosTime = vars.CheckForNewHungryDinosTime
+	
+	self.SpeciesInfo = {}
+	for k,v in pairs(vars.FeedDinosInfo) do
+		local speciesID = DinosAPI:GetSpeciesIDFromName(v.Species)
+		global.api.debug.Trace("FeedInsectivore Adding: " .. v.Species .. " with id: " .. speciesID)
+		if speciesID ~= nil and speciesID ~= 0 then
+			self.SpeciesInfo[speciesID] = v
+		end
+	end
+	
+	self:PrintConfigVars()
+end
+-----------------------------------------------------------------------------------------
 FeedInsectivoreManager.Init = function(self, _tProperties, _tEnvironment)
 	global.api.debug.Trace("acse Manager.FeedInsectivoreManager Init")
-
-	self.worldAPIs  = api.world.GetWorldAPIs()
-	self.xdlFlowMotionAPI = self.worldAPIs.xdlflowmotion
-	self.dinosAPI = self.worldAPIs.dinosaurs
+	
 	self.hungryDinos = {}
 	self.timer1 = 0.0
 	
-	self.CheckForNewHungryDinosTime = 30.0
-	self.FeedTimeDelayMin = 7
-	self.FeedTimeDelayMax = 15
-	self.FeedAmountMin = 0.01
-	self.FeedAmountMax = 0.15
-	self.BaseIgnoreTime = 5.0
-	
-	self.bLog = false
+	self.bLogAll = false
 	self.bLogOnlyFavoriteDinos = true
 end
 -----------------------------------------------------------------------------------------
-FeedInsectivoreManager.CanBeInsectivore = function(self, speciesName)
-	if  speciesName == "Compsognathus" or
-		speciesName == "Coelophysis" or
-		speciesName == "MorosIntrepidus" or
-		speciesName == "Sinosauropteryx" or
-		speciesName == "Troodon" then
-		return true
-	end
-	return false
-end
------------------------------------------------------------------------------------------
-FeedInsectivoreManager.Advance = function(self, deltaTime)
-	
-	self.timer1 = self.timer1 - deltaTime
-	
-	if self.timer1 < 0 then
-		self.timer1 = self.CheckForNewHungryDinosTime
-		self:CheckForNewHungryDinos()
-	end
-	
-	self:UpdateHungryDinos(deltaTime)
-end
------------------------------------------------------------------------------------------
 FeedInsectivoreManager.Activate = function(self)
-   self.hungryDinos = {}
+	self.hungryDinos = {}
+	self:LoadVarsFromConfig()
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.Deactivate = function(self)
-   self.hungryDinos = nil
+	self.hungryDinos = nil
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.Shutdown = function(self)
-   self.hungryDinos = nil
+	self.hungryDinos = nil
+end
+-----------------------------------------------------------------------------------------
+FeedInsectivoreManager.CanBeInsectivore = function(self, speciesID)
+	return self.SpeciesInfo[speciesID] ~= nil
+end
+-----------------------------------------------------------------------------------------
+FeedInsectivoreManager.GetSpeciesInfo = function(self, speciesID)
+	return self.SpeciesInfo[speciesID]
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.ShouldLog = function(self, entityID)
 	if self.bLogOnlyFavoriteDinos then
-		return self.dinosAPI:IsDinosaurFavourited(entityID)
+		return DinosAPI:IsDinosaurFavourited(entityID)
 	else
-		return self.bLog
+		return self.bLogAll
 	end
 end
 -----------------------------------------------------------------------------------------
-FeedInsectivoreManager.ShouldBeInList = function(self, entityID)
-	
-	if entityID == nil or self.dinosAPI:IsDead(entityID) then
+FeedInsectivoreManager.ShouldAddToList = function(self, entityID)
+	if entityID == nil or DinosAPI:IsDead(entityID) then
 		return false
 	end
 	
-	local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
-	local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
-	if not self:CanBeInsectivore(sSpeciesName) then
+	local nSpeciesID = DinosAPI:GetSpeciesID(entityID)
+	local speciesInfo = self:GetSpeciesInfo(nSpeciesID)
+	if speciesInfo == nil then
 		return false
 	end
 	
-	local tNeeds = self.dinosAPI:GetSatisfactionLevels(entityID)	
-	return (tNeeds.Hunger < 0.45) --(tNeeds.Thirst < 0.125) or 
+	local tNeeds = DinosAPI:GetSatisfactionLevels(entityID)	
+	return (tNeeds.Hunger < speciesInfo.HungerThreshold)
 end
 -----------------------------------------------------------------------------------------
-FeedInsectivoreManager.AddIfHungryDino = function(self, entityID, value)
-	if not self:ShouldBeInList(entityID) then
+FeedInsectivoreManager.ShouldRemoveFromList = function(self, entityID)
+	if entityID == nil or DinosAPI:IsDead(entityID) then
+		return true
+	end
+	
+	local nSpeciesID = DinosAPI:GetSpeciesID(entityID)
+	local speciesInfo = self:GetSpeciesInfo(nSpeciesID)
+	if speciesInfo == nil then
+		if self.bLogAll or self.bLogOnlyFavoriteDinos then
+			local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+			local sDinoName = api.ui.GetEntityName(entityID)
+			global.api.debug.Trace("FeedInsectivore Can't find speciesInfo for dino in list! : " .. sSpeciesName .. " info for dino: " .. sDinoName)					
+		end
+		return true
+	end
+	
+	local tNeeds = DinosAPI:GetSatisfactionLevels(entityID)	
+	return (tNeeds.Hunger > speciesInfo.RemoveThreshold)
+end
+-----------------------------------------------------------------------------------------
+FeedInsectivoreManager.AddIfHungryDino = function(self, entityID)
+	if not self:ShouldAddToList(entityID) then
 		return
 	end
+	
+	local nSpeciesID = DinosAPI:GetSpeciesID(entityID)
+	local speciesInfo = self:GetSpeciesInfo(nSpeciesID)
+	
+	if speciesInfo == nil then
+		return
+	end
+	
+	local nextFeedDelay = math.random()*(speciesInfo.FeedTimeDelayMax - speciesInfo.FeedTimeDelayMin) + speciesInfo.FeedTimeDelayMin
 	
 	local entityInList = self.hungryDinos[entityID]
-	if entityInList ~= nil and entityInList.key ~= nil and entityInList.key == false then
-	   if entityInList.value < 0.1*self.CheckForNewHungryDinosTime then
-			self.hungryDinos[entityID].key = true
-			self.hungryDinos[entityID].value = value
-			
-			if self:ShouldLog(entityID) then
-				local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
-				local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
-				local sDinoName = api.ui.GetEntityName(entityID)
-				global.api.debug.Trace("Hungry dino readded : " .. sSpeciesName .. " : " .. sDinoName)
+	if entityInList ~= nil and entityInList.key ~= nil then
+		if entityInList.key == false then
+			if entityInList.value < 0.1*self.CheckForNewHungryDinosTime then
+				self.hungryDinos[entityID].key = true
+				self.hungryDinos[entityID].value = nextFeedDelay
+				
+				if self:ShouldLog(entityID) then
+					local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+					local sDinoName = api.ui.GetEntityName(entityID)
+					global.api.debug.Trace("Hungry dino readded : " .. sSpeciesName .. " : " .. sDinoName)
+				end
 			end
 		end
+	else
+		self.hungryDinos[entityID] = {}
+		self.hungryDinos[entityID].key = true
+		self.hungryDinos[entityID].value = nextFeedDelay
 		
-		return
-	end
-	
-	self.hungryDinos[entityID] = {}
-	self.hungryDinos[entityID].key = true
-	self.hungryDinos[entityID].value = value
-	
-	if self:ShouldLog(entityID) then
-		local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
-		local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
-		local sDinoName = api.ui.GetEntityName(entityID)
-		global.api.debug.Trace("Hungry dino added : " .. sSpeciesName .. " : " .. sDinoName)
+		if self:ShouldLog(entityID) then
+			local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+			local sDinoName = api.ui.GetEntityName(entityID)
+			global.api.debug.Trace("Hungry dino added : " .. sSpeciesName .. " : " .. sDinoName)
+		end
 	end
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.UpdateHungryDinos = function(self, deltaTime)
-    for dinosaurEntity,v in pairs(self.hungryDinos) do
-		if v ~= nil and v.value ~= nil and v.key == true and not self.dinosAPI:IsDead(dinosaurEntity) then
-			local oldValue = v.value
-			v.value = v.value - deltaTime
-			self.hungryDinos[dinosaurEntity].value = v.value
-			
-			if oldValue >= 0.0 and v.value <= 0.0 then
-				self:FeedDino(dinosaurEntity, math.random()*(self.FeedAmountMax-self.FeedAmountMin) + self.FeedAmountMin, math.random(self.FeedTimeDelayMin, self.FeedTimeDelayMax))
+    for entityID,v in pairs(self.hungryDinos) do
+		if v ~= nil then
+			if v.value ~= nil and v.key == true then
+				if not DinosAPI:IsDead(entityID) then
+					local oldValue = v.value
+					v.value = v.value - deltaTime
+					self.hungryDinos[entityID].value = v.value
+					
+					if oldValue >= 0.0 and v.value <= 0.0 then
+						local speciesID = DinosAPI:GetSpeciesID(entityID)
+						local speciesInfo = self:GetSpeciesInfo(speciesID)
+						if speciesInfo ~= nil then
+							local feedAmount = math.random()*(speciesInfo.FeedAmountMax-speciesInfo.FeedAmountMin) + speciesInfo.FeedAmountMin
+							local nextFeedDelay = math.random()*(speciesInfo.FeedTimeDelayMax - speciesInfo.FeedTimeDelayMin) + speciesInfo.FeedTimeDelayMin
+							self:FeedDino(entityID, feedAmount, feedAmount * speciesInfo.FeedWaterContentFraction, nextFeedDelay)
+						end
+					end
+				end
 			end
 		end
 	end
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.CheckForNewHungryDinos = function(self)
-    local parkDinos = self.dinosAPI:GetDinosaurs(false)
+    local parkDinos = DinosAPI:GetDinosaurs(false)
 	
-	for a,dinosaurEntity in pairs(parkDinos) do
-		self:AddIfHungryDino(dinosaurEntity, math.random(self.FeedTimeDelayMin, self.FeedTimeDelayMax))
+	for a,entityID in pairs(parkDinos) do
+		self:AddIfHungryDino(entityID)
 	end
 	
-	if self.bLog then
+	if self.bLogAll or self.bLogOnlyFavoriteDinos then
 		local numLonely = 0
 		for k,v in pairs(self.hungryDinos) do
-			if v ~= nil and v.key ~= nil and v.key == true then
-				numLonely = numLonely + 1
+			if v ~= nil then 
+				if v.key == true then
+					numLonely = numLonely + 1
+				end
 			end
 		end
 		global.api.debug.Trace("FeedInsectivoreManager.CheckForNewHungryDinos() num: " .. numLonely)
@@ -168,42 +294,54 @@ FeedInsectivoreManager.CheckForNewHungryDinos = function(self)
 end
 -----------------------------------------------------------------------------------------
 FeedInsectivoreManager.RemoveNonHungryDinos = function(self)
-    for dinosaurEntity,v in pairs(self.hungryDinos) do
-		if (v ~= nil) and (v.key ~= nil and v.value ~= nil) and (v.key == true) then
-			if not self:ShouldBeInList(dinosaurEntity) then
-				
-				self.hungryDinos[dinosaurEntity].key = false
-				
-				if not self.dinosAPI:IsDead(dinosaurEntity) then
-					self.hungryDinos[dinosaurEntity].value = self.BaseIgnoreTime
-				else
-					self.hungryDinos[dinosaurEntity].value = math.huge
-				end
-				
-				if self:ShouldLog(dinosaurEntity) then
-					local nSpeciesID = self.dinosAPI:GetSpeciesID(dinosaurEntity)
-					local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
-					local sDinoName = api.ui.GetEntityName(dinosaurEntity)
-					global.api.debug.Trace("Hungry dino removed " .. sSpeciesName .. ": " .. sDinoName)
+    for entityID,v in pairs(self.hungryDinos) do
+		if v ~= nil then
+			if v.key ~= nil and v.value ~= nil then 
+				if v.key == true then
+					if self:ShouldRemoveFromList(entityID) then
+						self.hungryDinos[entityID].key = false
+						
+						if not DinosAPI:IsDead(entityID) then
+							local speciesID = DinosAPI:GetSpeciesID(entityID)
+							local speciesInfo = self:GetSpeciesInfo(speciesID)
+							if speciesInfo ~= nil then
+								self.hungryDinos[entityID].value = speciesInfo.IgnoreTime
+							else
+								self.hungryDinos[entityID].value = 60.0
+							end
+						else
+							self.hungryDinos[entityID] = nil
+						end
+						
+						if self:ShouldLog(entityID) then
+							local nSpeciesID = DinosAPI:GetSpeciesID(entityID)
+							local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+							local sDinoName = api.ui.GetEntityName(entityID)
+							global.api.debug.Trace("Hungry dino removed " .. sSpeciesName .. ": " .. sDinoName)
+						end
+					end
 				end
 			end
 		end
 	end
 end
 -----------------------------------------------------------------------------------------
-FeedInsectivoreManager.FeedDino = function(self, entityID, amount, nextTime)
-	if not self.dinosAPI:IsDead(entityID) then
+FeedInsectivoreManager.FeedDino = function(self, entityID, amount, waterAmount, nextTime)
+	if not DinosAPI:IsDead(entityID) then
 		-- api.motiongraph.SetEnumVariable(entityID, "Action", "Actions", "Eat")
 		
-		local tNeeds = self.dinosAPI:GetSatisfactionLevels(entityID)
+		local tNeeds = DinosAPI:GetSatisfactionLevels(entityID)
 		local newHunger = tNeeds.Hunger + amount
+		local newThirst = tNeeds.Thirst + waterAmount
 		newHunger = math.min(math.max(newHunger, 0.0), 1.0)
-		self.dinosAPI:SetSatisfactionLevels(entityID, self.dinosAPI.DNT_Hunger, newHunger)
+		newThirst = math.min(math.max(newThirst, 0.0), 1.0)
+		DinosAPI:SetSatisfactionLevels(entityID, DinosAPI.DNT_Hunger, newHunger)
+		DinosAPI:SetSatisfactionLevels(entityID, DinosAPI.DNT_Thirst, newThirst)
 		
 		self.hungryDinos[entityID].value = nextTime
 		
 		if self:ShouldLog(entityID) then
-			local nSpeciesID = self.dinosAPI:GetSpeciesID(entityID)
+			local nSpeciesID = DinosAPI:GetSpeciesID(entityID)
 			local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 			local sDinoName = api.ui.GetEntityName(entityID)
 			global.api.debug.Trace("Hungry " .. sSpeciesName .. ": " .. sDinoName .. " started eating")
@@ -211,14 +349,25 @@ FeedInsectivoreManager.FeedDino = function(self, entityID, amount, nextTime)
 	end
 end
 -----------------------------------------------------------------------------------------
-FeedInsectivoreManager.CommandTravelTo = function(self, entityID, position)
-	if not self.dinosAPI:IsDead(entityID) then
-		-- global.api.debug.Trace("FeedInsectivoreManager.CommandTravelTo()")
-		local tTransform = TransformAPI.GetTransform(entityID)
-		api.motiongraph.SetEnumVariable(entityID, "Pace", "Paces", "Run")
-		self.xdlFlowMotionAPI:TravelTo(entityID, tTransform:WithPos(position))
+
+-----------------------------------------------------------------------------------------
+FeedInsectivoreManager.Advance = function(self, deltaTime)
+	if deltaTime == 0.0 then
+		return
 	end
+	
+	self.timer1 = self.timer1 - deltaTime
+	
+	if self.timer1 < 0.0 then
+		self.timer1 = self.CheckForNewHungryDinosTime
+		self:CheckForNewHungryDinos()
+	end
+	
+	self:UpdateHungryDinos(deltaTime)
+	self:RemoveNonHungryDinos()
 end
+-----------------------------------------------------------------------------------------
+
 -----------------------------------------------------------------------------------------
 -- Validate the class methods/interfaces
 (Mutators.VerifyManagerModule)(FeedInsectivoreManager)
