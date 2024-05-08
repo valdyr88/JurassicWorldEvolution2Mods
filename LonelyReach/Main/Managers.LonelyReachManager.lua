@@ -11,18 +11,9 @@ local Vector3 = require("Vector3")
 local Quaternion = require("Quaternion")
 local Object = require("Common.object")
 local Mutators = require("Environment.ModuleMutators")
-local DebugAPI = api.debug
-local EntityAPI = api.entity
-local PhysicsAPI = api.physics
-local TransformAPI = api.transform
-local DinosaursDatabaseHelper = require("Helpers.DinosaursDatabaseHelper")
-local RaycastUtils = require("Helpers.RaycastUtils")
-local XDLFlowMotionAPI = api.world.GetWorldAPIs().xdlflowmotion
-local DinosAPI = api.world.GetWorldAPIs().dinosaurs
 
 -----------------------------------------------------------------------------------------
-local LonelyReachManager= module(..., (Mutators.Manager)())
-global.api.debug.Trace("acse Manager.LonelyReachManager.lua loaded")
+local LonelyReachManager = module(..., (Mutators.Manager)())
 -----------------------------------------------------------------------------------------
 LonelyReachManager.PrintConfigVars = function(self)
 	global.api.debug.Trace("")
@@ -87,47 +78,77 @@ LonelyReachManager.LoadVarsFromConfig = function(self)
 	self:PrintConfigVars()
 end
 -----------------------------------------------------------------------------------------
-LonelyReachManager.Init = function(self, _tProperties, _tEnvironment)
-	global.api.debug.Trace("acse Manager.LonelyReachManager Init")
-	
+LonelyReachManager.Initialize = function(self)
 	self.lonelyDinos = {}
 	self.timer1 = 0.0
 	self.timer2 = 0.0
 	
 	self.bLogAll = false
 	self.bLogOnlyFavoriteDinos = true
+	
+	self.bDeactivated = false
+	self.bShutdown = false
+	
+	self.DebugAPI = api.debug
+	self.EntityAPI = api.entity
+	self.PhysicsAPI = api.physics
+	self.TransformAPI = api.transform
+	self.DinosaursDatabaseHelper = require("Helpers.DinosaursDatabaseHelper")
+	self.RaycastUtils = require("Helpers.RaycastUtils")
+	self.XDLFlowMotionAPI = api.world.GetWorldAPIs().xdlflowmotion
+	self.DinosAPI = api.world.GetWorldAPIs().dinosaurs
+end
+-----------------------------------------------------------------------------------------
+LonelyReachManager.Init = function(self, _tProperties, _tEnvironment)
+	global.api.debug.Trace("acse Manager.LonelyReachManager Init")
+end
+-----------------------------------------------------------------------------------------
+LonelyReachManager.ReleaseArray = function(self)
+	if self.lonelyDinos ~= nil then
+		for k, v in pairs(self.lonelyDinos) do
+			self.lonelyDinos[k].location = nil
+			self.lonelyDinos[k] = nil
+		end
+	end
+	self.lonelyDinos = {}
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Activate = function(self)
-	self.lonelyDinos = {}
+	self:Initialize()
 	self:LoadVarsFromConfig()
+	self.bDeactivated = false
+	self.bShutdown = false
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Deactivate = function(self)
-	self.lonelyDinos = nil
+	self:ReleaseArray()
+	self.lonelyDinos = {}
+	self.bDeactivated = true
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Shutdown = function(self)
+	self:ReleaseArray()
 	self.lonelyDinos = nil
+	self.bShutdown = true
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.ShouldLog = function(self, entityID)
 	if self.bLogOnlyFavoriteDinos then
-		return DinosAPI:IsDinosaurFavourited(entityID)
+		return self.DinosAPI:IsDinosaurFavourited(entityID)
 	else
 		return self.bLogAll
 	end
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.IsDeadOrUnconcious = function(self, entityID)
-	return DinosAPI:IsDead(entityID) or not DinosAPI:IsConscious(entityID)
+	return self.DinosAPI:IsDead(entityID) or not self.DinosAPI:IsConscious(entityID)
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.CommandTravelTo = function(self, entityID, position)
 	if not self:IsDeadOrUnconcious(entityID) then
-		local tTransform = TransformAPI.GetTransform(entityID)
+		local tTransform = self.TransformAPI.GetTransform(entityID)
 		api.motiongraph.SetEnumVariable(entityID, "Pace", "Paces", "Run")
-		XDLFlowMotionAPI:TravelTo(entityID, tTransform:WithPos(position))
+		self.XDLFlowMotionAPI:TravelTo(entityID, tTransform:WithPos(position))
 	end
 end
 -----------------------------------------------------------------------------------------
@@ -136,22 +157,22 @@ LonelyReachManager.ShouldBeInList = function(self, entityID)
 		return false
 	end
 	
-	if DinosAPI:IsHealthLowAndNotRecovering(entityID) then
+	if self.DinosAPI:IsHealthLowAndNotRecovering(entityID) then
 		return false
 	end
 	
-	local tNeeds = DinosAPI:GetSatisfactionLevels(entityID)
+	local tNeeds = self.DinosAPI:GetSatisfactionLevels(entityID)
 	-- if thirsty, hungry, sleepy then prioritise those
 	if (tNeeds.Thirst < 0.6) or (tNeeds.Hunger < 0.5) or (tNeeds.Stamina < 0.3) then
 		return false
 	end
 	
-    local tBio = DinosAPI:GetDinosaurBio(entityID)
+    local tBio = self.DinosAPI:GetDinosaurBio(entityID)
 	return tNeeds.HabitatSocial < tBio.nMinSocialThreshold
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.CalcAddToListDowntime = function(self, entityID)
-	local tNeeds = DinosAPI:GetSatisfactionLevels(entityID)
+	local tNeeds = self.DinosAPI:GetSatisfactionLevels(entityID)
 	-- check if thirsty, hungry, sleepy then ignore for a while
 	
 	if (tNeeds.Thirst < 0.1) or (tNeeds.Hunger < 0.1) then
@@ -176,9 +197,9 @@ LonelyReachManager.FindClosestMemberOfSpecies = function(self, lonelyDino)
 		return nil
 	end
 	
-    local parkDinos = DinosAPI:GetDinosaurs(false)
-	local lonelySpecies = DinosAPI:GetSpeciesID(lonelyDino)
-	local lonelyPos = TransformAPI.GetTransform(lonelyDino):GetPos()
+    local parkDinos = self.DinosAPI:GetDinosaurs(false)
+	local lonelySpecies = self.DinosAPI:GetSpeciesID(lonelyDino)
+	local lonelyPos = self.TransformAPI.GetTransform(lonelyDino):GetPos()
 	
 	local closestNonLonely = nil
 	local closestNonLonelyDistance = math.huge
@@ -189,13 +210,13 @@ LonelyReachManager.FindClosestMemberOfSpecies = function(self, lonelyDino)
 		local otherDino = parkDinos[i]
 		
 		if (otherDino ~= lonelyDino) and (otherDino ~= nil) then
-			if (lonelySpecies == DinosAPI:GetSpeciesID(otherDino)) then
+			if (lonelySpecies == self.DinosAPI:GetSpeciesID(otherDino)) then
 				if (not self:IsDeadOrUnconcious(otherDino)) then
 					
-					local tNeeds = DinosAPI:GetSatisfactionLevels(otherDino)
-					local tBio = DinosAPI:GetDinosaurBio(otherDino)
+					local tNeeds = self.DinosAPI:GetSatisfactionLevels(otherDino)
+					local tBio = self.DinosAPI:GetDinosaurBio(otherDino)
 					
-					local otherDinoPos = TransformAPI.GetTransform(otherDino):GetPos()
+					local otherDinoPos = self.TransformAPI.GetTransform(otherDino):GetPos()
 					local dPos = lonelyPos - otherDinoPos
 					local dX = dPos:GetX()
 					local dY = dPos:GetY()
@@ -230,7 +251,7 @@ LonelyReachManager.FindClosestMemberOfSpecies = function(self, lonelyDino)
 	
 	if targetDino == nil then
 		if self:ShouldLog(lonelyDino) then
-			local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(lonelySpecies)
+			local sSpeciesName = self.DinosaursDatabaseHelper.GetNameForSpecies(lonelySpecies)
 			global.api.debug.Trace("LonelyReachManager.FindClosestMemberOfSpecies() can't find other dino of " .. sSpeciesName)
 		end
 	end
@@ -251,8 +272,8 @@ LonelyReachManager.AddIfLonelyDino = function(self, entityID, value)
 			self.lonelyDinos[entityID].value = value
 			
 			if self:ShouldLog(entityID) then
-				local nSpeciesID = DinosAPI:GetSpeciesID(entityID)
-				local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+				local nSpeciesID = self.DinosAPI:GetSpeciesID(entityID)
+				local sSpeciesName = self.DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 				local sDinoName = api.ui.GetEntityName(entityID)
 				global.api.debug.Trace("Lonely dino readded : " .. sSpeciesName .. " : " .. sDinoName)
 			end
@@ -266,8 +287,8 @@ LonelyReachManager.AddIfLonelyDino = function(self, entityID, value)
 		self.lonelyDinos[entityID].cmdCounter = 5
 		
 		if self:ShouldLog(entityID) then
-			local nSpeciesID = DinosAPI:GetSpeciesID(entityID)
-			local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+			local nSpeciesID = self.DinosAPI:GetSpeciesID(entityID)
+			local sSpeciesName = self.DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 			local sDinoName = api.ui.GetEntityName(entityID)
 			global.api.debug.Trace("Lonely dino added : " .. sSpeciesName .. " : " .. sDinoName)
 		end
@@ -275,7 +296,7 @@ LonelyReachManager.AddIfLonelyDino = function(self, entityID, value)
 end
 -----------------------------------------------------------------------------------------
 LonelyReachManager.CheckForNewLonelyDinos = function(self)
-    local parkDinos = DinosAPI:GetDinosaurs(false)
+    local parkDinos = self.DinosAPI:GetDinosaurs(false)
 	
 	for a,entityID in pairs(parkDinos) do
 		self:AddIfLonelyDino(entityID, 2.0)
@@ -309,11 +330,11 @@ LonelyReachManager.RemoveNonLonelyDinos = function(self)
 					end
 					
 					if self:ShouldLog(entityID) then
-						if not DinosAPI:IsDead(entityID) then
-							local nSpeciesID = DinosAPI:GetSpeciesID(entityID)
-							local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+						if not self.DinosAPI:IsDead(entityID) then
+							local nSpeciesID = self.DinosAPI:GetSpeciesID(entityID)
+							local sSpeciesName = self.DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 							local sDinoName = api.ui.GetEntityName(entityID)
-							local tNeeds = DinosAPI:GetSatisfactionLevels(entityID)
+							local tNeeds = self.DinosAPI:GetSatisfactionLevels(entityID)
 							global.api.debug.Trace("Lonely dino removed " .. sSpeciesName .. ": " .. sDinoName .. ", Thirst: " .. tNeeds.Thirst .. ", Hunger: " .. tNeeds.Hunger .. ", Sleep: " .. tNeeds.Sleep .. ", Stamina: " .. tNeeds.Stamina)
 						else
 							local sDinoName = api.ui.GetEntityName(entityID)
@@ -343,8 +364,8 @@ LonelyReachManager.IssueMovementCommands = function(self)
 					
 					local closestDino = self:FindClosestMemberOfSpecies(entityID)
 					if closestDino ~= nil then
-						local lonelyPos = TransformAPI.GetTransform(entityID):GetPos()
-						local targetPos = TransformAPI.GetTransform(closestDino):GetPos()
+						local lonelyPos = self.TransformAPI.GetTransform(entityID):GetPos()
+						local targetPos = self.TransformAPI.GetTransform(closestDino):GetPos()
 						
 						--limit travel distance
 						local dPos = targetPos - lonelyPos
@@ -358,7 +379,7 @@ LonelyReachManager.IssueMovementCommands = function(self)
 							targetPos = Vector3:new(dX * scaleDelta + lonelyPos:GetX(),
 													dY * scaleDelta + lonelyPos:GetY() + 1000.0,
 													dZ * scaleDelta + lonelyPos:GetZ())
-							local raytracePos = RaycastUtils.GetTerrainPositionUnderRaycast(targetPos, Vector3:new(0.0,-1.0,0.0))
+							local raytracePos = self.RaycastUtils.GetTerrainPositionUnderRaycast(targetPos, Vector3:new(0.0,-1.0,0.0))
 							targetPos = Vector3:new(targetPos:GetX(),
 													raytracePos:GetY(),
 													targetPos:GetZ())
@@ -367,13 +388,13 @@ LonelyReachManager.IssueMovementCommands = function(self)
 						self:CommandTravelTo(entityID, targetPos)
 						
 						if self:ShouldLog(entityID) then
-							local nSpeciesID = DinosAPI:GetSpeciesID(entityID)
-							local sSpeciesName = DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
+							local nSpeciesID = self.DinosAPI:GetSpeciesID(entityID)
+							local sSpeciesName = self.DinosaursDatabaseHelper.GetNameForSpecies(nSpeciesID)
 							local sDinoName = api.ui.GetEntityName(entityID)
 							local sClosestDinoName = api.ui.GetEntityName(closestDino)
 							
-							local tNeeds = DinosAPI:GetSatisfactionLevels(entityID)
-							local tBio = DinosAPI:GetDinosaurBio(entityID)
+							local tNeeds = self.DinosAPI:GetSatisfactionLevels(entityID)
+							local tBio = self.DinosAPI:GetDinosaurBio(entityID)
 							
 							global.api.debug.Trace("Lonely " .. sSpeciesName .. " " .. sDinoName .. ", moving to: " .. sClosestDinoName .. ", distance: " .. math.sqrt(distanceSq) .. " social: " .. tNeeds.HabitatSocial .. " < socialThr: " .. tBio.nMinSocialThreshold)
 						end
@@ -384,8 +405,7 @@ LonelyReachManager.IssueMovementCommands = function(self)
 						self.lonelyDinos[entityID].cmdCounter = cmdCount-1
 						self.lonelyDinos[entityID].value = 0.25
 					else
-						self.lonelyDinos[entityID].value = math.random() * self.IssueMovementCommandRndTime
-																+ self.IssueMovementCommandTime
+						self.lonelyDinos[entityID].value = math.random() * self.IssueMovementCommandRndTime + self.IssueMovementCommandTime
 						self.lonelyDinos[entityID].cmdCounter = self.CommandCount
 					end
 				end
@@ -397,7 +417,7 @@ end
 
 -----------------------------------------------------------------------------------------
 LonelyReachManager.Advance = function(self, deltaTime)
-	if deltaTime == 0.0 then
+	if (deltaTime == 0.0) or (self.bDeactivated == true) or (self.bShutdown == true) then
 		return
 	end
 	
