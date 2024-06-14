@@ -269,13 +269,13 @@ end
 FeedInsectivoreManager.UpdateHungryDinos = function(self, deltaTime)
     for entityID,v in pairs(self.hungryDinos) do
 		if v ~= nil then
-			if v.value ~= nil and v.key == true then
+			if v.value ~= nil then
 				if not self.DinosAPI:IsDead(entityID) then
 					local oldValue = v.value
 					v.value = v.value - deltaTime
 					self.hungryDinos[entityID].value = v.value
 					
-					if oldValue >= 0.0 and v.value <= 0.0 then
+					if v.key == true and oldValue >= 0.0 and v.value <= 0.0 then
 						local speciesID = self.DinosAPI:GetSpeciesID(entityID)
 						local speciesInfo = self:GetSpeciesInfo(speciesID)
 						if speciesInfo ~= nil then
